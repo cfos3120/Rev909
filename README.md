@@ -16,7 +16,7 @@ In this work, we propose a machine learning framework, which we call the Markov 
 * ``data_generation/``: directory containing data generation code for our toy Lorenz-63 dataset and the 1D Kuramoto–Sivashinsky PDE.
 * ``scripts/``: scripts for training Lorenz-63 model, 1D KS, and 2D NS equations.
     * ``NS_fno_baseline.py``: FNO baseline trained on 2D NS with Reynolds number 500. No dissipativity or Sobolev loss.
-    * ``NS_mno_dissipative.py``: MNO model built on FNO architecture with dissipativity encouraged and Sobolev loss.
+    * ``NS_mno_dissipative.py``: MNO model built on FNO architecture with dissipativity encouraged and Sobolev loss. Make sure to set the inner and outer radii based on the dataset in question. A lower bound on the inner radius should be `np.linalg.norm(data[:,100:,...], axis=(2, 3)) * data.shape[-1]`. We used an outer radius roughly 4-5x larger than the inner radius.
     * ``lorenz_densenet.py``: simple feedforward neural network learning Markovian solution operator for Lorenz-63 system. 
     * ``lorenz_dissipative_densenet.py``: simple feedforward neural network with dissipativity encouraged trained on Lorenz-63 system.
 * `lorenz.ipynb`: Jupyter notebook with examples to reproduce plots and figures for our Lorenz-63 examples in the paper.
