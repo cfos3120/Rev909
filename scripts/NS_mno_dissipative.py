@@ -4,12 +4,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import sys
-sys.path.append('../')
+import os
+parent = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(parent)
+
 from utilities import *
 from dissipative_utils import sample_uniform_spherical_shell, linear_scale_dissipative_target
 
-sys.path.append('../models')
-from fno_2d import *
+#sys.path.append('../models')
+from models.fno_2d import *
 
 from timeit import default_timer
 import scipy.io
@@ -18,17 +21,19 @@ torch.manual_seed(0)
 np.random.seed(0)
 
 # Main
-ntrain = 900
-ntest = 100
+ntrain = 180 #900
+ntest = 20 #100
 
 S = 64
 
 # DISSIPATIVE REGULARIZATION PARAMETERS
 # below, the number before multiplication by S is the radius in the L2 norm of the function space
-radius = 156.25 * S # radius of inner ball
+#radius = 156.25 * S # radius of inner ball
+radius = 17500 # based on own calculation
 scale_down = 0.5 # rate at which to linearly scale down inputs
 loss_weight = 0.01 * (S**2) # normalized by L2 norm in function space
-radii = (radius, (525 * S) + radius) # inner and outer radii, in L2 norm of function space
+#radii = (radius, (525 * S) + radius) # inner and outer radii, in L2 norm of function space
+radii = (radius, radius*4) # based on own calculation
 sampling_fn = sample_uniform_spherical_shell #numsampled is batch size
 target_fn = linear_scale_dissipative_target
 
@@ -62,7 +67,8 @@ T_out = T_in + T
 step = 1 # Seconds to learn solution operator
 
 t1 = default_timer()
-data = np.load('../data/KFvorticity_Re500_N1000_T500.npy')
+#data = np.load('../data/KFvorticity_Re500_N1000_T500.npy')
+data = np.load(r"C:\Users\Noahc\Documents\USYD\PHD\0 - Work Space\Markov Studies\2D_NS_Re40.npy")
 data = torch.tensor(data, dtype=torch.float)[..., ::sub, ::sub]
 
 train_a = data[:ntrain,T_in-1:T_out-1].reshape(ntrain*T, S, S)
@@ -79,10 +85,10 @@ test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_a,
 t2 = default_timer()
 
 print('preprocessing finished, time used:', t2-t1)
-device = torch.device('cuda')
+device = torch.device('cpu')
 
 # Model
-model = Net2d(in_dim, out_dim, S, modes, width).cuda()
+model = Net2d(in_dim, out_dim, S, modes, width).to(device)
 print(model.count_params())
 
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
@@ -138,6 +144,7 @@ for ep in range(1, epochs + 1):
     scheduler.step()
     print("Epoch " + str(ep) + " completed in " + "{0:.{1}f}".format(t2-t1, 3) + " seconds. Train err:", "{0:.{1}f}".format(train_loss/(ntrain*T), 3), "Test L2 err:", "{0:.{1}f}".format(test_l2/(ntest*T), 3), "Test H1 err:",  "{0:.{1}f}".format(test_h1/(ntest*T), 3), "Test H2 err:",  "{0:.{1}f}".format(test_h2/(ntest*T), 3), "Train diss err:", "{0:.{1}f}".format(diss_l2/(ntrain), 3))
     print(ep, t2 - t1, train_loss/(ntrain*T), test_l2/(ntest*T), test_h1/(ntest*T), test_h2/(ntest*T), diss_l2/(ntrain))
+    break
 
 torch.save(model, path_model)
 print("Weights saved to", path_model)
@@ -154,5 +161,7 @@ with torch.no_grad():
         out = model(out.reshape(1,S,S,in_dim))
         pred[:,:,i] = out.view(S,S)
 
-scipy.io.savemat('pred/'+path+'.mat', mdict={'pred': pred.cpu().numpy()})
-print("10000 seconds of predictions saved to", pred_path)
+pred_path = 'pred/'+path+'.npy'
+np.save(pred_path, pred.cpu().numpy())
+#scipy.io.savemat('pred/'+path+'.mat', mdict={'pred': pred.cpu().numpy()})
+#print("10000 seconds of predictions saved to", pred_path)
