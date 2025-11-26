@@ -162,3 +162,4 @@ cython_debug/
 # Ignore Datasets
 *.npy
 *.code-workspace
+/model
