@@ -1,9 +1,18 @@
 import torch
 import numpy as np
+import argparse
+
+def parse_args():
+    parser = argparse.ArgumentParser("TRAIN THE FLASH GNOT TRANSFORMER")
+    parser.add_argument('--config', type=str, help="json configuration file")
+    parser.add_argument('--wandb', type=str, help="wandb mode", choices=['online','offline','disabled'], default='offline')
+    parser.add_argument('--sweep', type=str, help="sweep json file")
+    args = parser.parse_args()
+    return args
 
 class HsLoss_real(object):
     def __init__(self,
-                 grad_calculator,
+                 grad_calculator = periodic_derivatives,
                  d=2, 
                  p=2, 
                  k=1, 
@@ -43,9 +52,10 @@ class HsLoss_real(object):
     
 
     def __call__(self, x, y, a=None):
-
-        x_dx1, x_dy1, x_dx2, x_dy2 = self.grad_function(x)
-        y_dx1, y_dy1, y_dx2, y_dy2 = self.grad_function(y)
+        
+        dh = 2*np.pi/x.shape[-2]
+        x_dx1, x_dy1, x_dx2, x_dy2 = self.grad_function(x, dx=dh, dy=dh)
+        y_dx1, y_dy1, y_dx2, y_dy2 = self.grad_function(y, dx=dh, dy=dh)
 
         if self.balanced==False:
             weight_x = x**2
@@ -74,7 +84,6 @@ class HsLoss_real(object):
 
         return loss
     
-
 def periodic_derivatives(x, dx=1.0, dy=1.0):
     """
     Compute first and second derivatives with 2nd-order central differences
