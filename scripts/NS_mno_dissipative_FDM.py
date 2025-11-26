@@ -10,12 +10,22 @@ sys.path.append(parent)
 
 from utilities import *
 from dissipative_utils import sample_uniform_spherical_shell, linear_scale_dissipative_target
+from my_utils import HsLoss_real
 
 #sys.path.append('../models')
 from models.fno_2d import *
 
 from timeit import default_timer
 import scipy.io
+
+# global path (HPC or Local)
+import socket
+if socket.gethostname() == 'DESKTOP-157DQSC':
+    device = torch.device('cpu')
+    data_path = r"C:\Users\Noahc\Documents\USYD\PHD\0 - Work Space\Markov Studies\2D_NS_Re40.npy"
+else:
+    device = torch.device('cuda')
+    data_path = "/home/n.foster/datasets/2D_NS_Re500.npy"
 
 torch.manual_seed(0)
 np.random.seed(0)
@@ -43,7 +53,7 @@ width = 64
 in_dim = 1
 out_dim = 1
 
-batch_size = 50
+batch_size = 1 #50
 
 epochs = 50
 learning_rate = 0.0005
@@ -56,7 +66,7 @@ loss_group = True
 print(epochs, learning_rate, scheduler_step, scheduler_gamma)
 
 path = 'NS_fourier_MNO_dissipative_N_'+str(ntrain)+'_k' + str(loss_k)+'_g' + str(loss_group)+'_ep' + str(epochs) + '_m' + str(modes) + '_w' + str(width)
-path_model = 'model/'+path
+path_model = './model/'+path
 
 sub = 1 # spatial subsample
 S = 64
@@ -68,7 +78,7 @@ step = 1 # Seconds to learn solution operator
 
 t1 = default_timer()
 #data = np.load('../data/KFvorticity_Re500_N1000_T500.npy')
-data = np.load(r"C:\Users\Noahc\Documents\USYD\PHD\0 - Work Space\Markov Studies\2D_NS_Re40.npy")
+data = np.load(data_path)
 data = torch.tensor(data, dtype=torch.float)[..., ::sub, ::sub]
 
 train_a = data[:ntrain,T_in-1:T_out-1].reshape(ntrain*T, S, S)
@@ -85,8 +95,6 @@ test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_a,
 t2 = default_timer()
 
 print('preprocessing finished, time used:', t2-t1)
-device = torch.device('cpu')
-
 # Model
 model = Net2d(in_dim, out_dim, S, modes, width).to(device)
 print(model.count_params())
@@ -97,7 +105,8 @@ scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step,
 lploss = LpLoss(size_average=False)
 h1loss = HsLoss(k=1, group=False, size_average=False)
 h2loss = HsLoss(k=2, group=False, size_average=False)
-myloss = HsLoss(k=loss_k, group=loss_group, size_average=False)
+#myloss = HsLoss(k=loss_k, group=loss_group, size_average=False)
+myloss = HsLoss_real(k=loss_k, group=loss_group, size_average=False)
 dissloss = nn.MSELoss(reduction='mean')
 
 # Training
@@ -144,7 +153,6 @@ for ep in range(1, epochs + 1):
     scheduler.step()
     print("Epoch " + str(ep) + " completed in " + "{0:.{1}f}".format(t2-t1, 3) + " seconds. Train err:", "{0:.{1}f}".format(train_loss/(ntrain*T), 3), "Test L2 err:", "{0:.{1}f}".format(test_l2/(ntest*T), 3), "Test H1 err:",  "{0:.{1}f}".format(test_h1/(ntest*T), 3), "Test H2 err:",  "{0:.{1}f}".format(test_h2/(ntest*T), 3), "Train diss err:", "{0:.{1}f}".format(diss_l2/(ntrain), 3))
     print(ep, t2 - t1, train_loss/(ntrain*T), test_l2/(ntest*T), test_h1/(ntest*T), test_h2/(ntest*T), diss_l2/(ntrain))
-    break
 
 torch.save(model, path_model)
 print("Weights saved to", path_model)
@@ -155,13 +163,13 @@ test_a = test_a[0,:,:]
 
 T = 10000
 pred = torch.zeros(S,S,T)
-out = test_a.reshape(1,S,S).cuda()
+out = test_a.reshape(1,S,S).to(device)
 with torch.no_grad():
     for i in range(T):
         out = model(out.reshape(1,S,S,in_dim))
         pred[:,:,i] = out.view(S,S)
 
-pred_path = 'pred/'+path+'.npy'
+pred_path = path_model + '.npy'
 np.save(pred_path, pred.cpu().numpy())
 #scipy.io.savemat('pred/'+path+'.mat', mdict={'pred': pred.cpu().numpy()})
-#print("10000 seconds of predictions saved to", pred_path)
+print("10000 seconds of predictions saved to", pred_path)
