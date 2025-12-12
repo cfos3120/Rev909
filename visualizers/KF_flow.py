@@ -17,8 +17,8 @@ def plot_evaluation_gif(out,y, n=10):
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
         
         # Squeeze C if it's 1
-        b_img = out[idx, :, :, 0]
-        a_img = y[idx, :, :, 0]
+        b_img = out[idx, :, :, 0].cpu().numpy()
+        a_img = y[idx, :, :, 0].cpu().numpy()
         error_img = a_img - b_img
         
         # Heatmaps

@@ -1,0 +1,11 @@
+method: grid
+
+parameters:
+  soblev_norm_order:
+    values: [0, 1, 2]
+  regularise:
+    values: [True, False]
+
+metric:
+  name: loss
+  goal: minimize

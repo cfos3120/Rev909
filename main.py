@@ -89,7 +89,22 @@ def eval_batch(model, x, y, loss_fn):
     loss_dict['testing/h2_data_loss'] = loss_fn(out, y, k=2).item()
 
     return loss_dict
-        
+
+def eval_longrollout(model, starting_u, T, S):
+    if len(starting_u.shape) == 3:
+        starting_u = starting_u.unsqueeze(-1)
+
+    channel_n = starting_u.shape[-1]
+    pred = torch.zeros_like(starting_u).repeat(T,1,1,1)
+    out = starting_u.reshape(1,S,S,channel_n).to(device)
+    pred[0,:,:,:] = out.view(S,S,channel_n)
+    with torch.no_grad():
+        for i in range(T-1):
+            out = model(out)
+            pred[i+1,:,:,:] = out.view(S,S,channel_n)
+    
+    return pred
+
 def pipeline(config):
 
     epochs          = config['parameters']['epochs']
@@ -120,11 +135,10 @@ def pipeline(config):
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step, gamma=scheduler_gamma)
     train_loss_fn = HsLoss_real(group=True, size_average=False, k=k)
     eval_loss_fn = HsLoss_real(group=False, size_average=False)
-
+    
     for epoch in range(epochs):
         model.train()
 
-        itr = 0
         mini_batch_loss_dict = {}
         for x, y in train_loader:
             x, y = x.to(device), y.to(device)
@@ -135,12 +149,7 @@ def pipeline(config):
             scheduler.step()
             if mini_batch_loss_dict == {}: mini_batch_loss_dict = {k: [] for k in loss_dict}
             for key, value in loss_dict.items(): mini_batch_loss_dict[key].append(value)
-            
-            itr+=1
-            if itr == 2:
-                break
         
-        itr = 0
         for x, y in test_loader:
             x, y = x.to(device), y.to(device)
             loss_dict = eval_batch(model, x, y, eval_loss_fn)
@@ -148,17 +157,10 @@ def pipeline(config):
                 for key in loss_dict: mini_batch_loss_dict[key] = []
             for key, value in loss_dict.items(): mini_batch_loss_dict[key].append(value)
 
-            itr+=1
-            if itr == 2:
-                break
-
         # summarise epoch
-        print(mini_batch_loss_dict)
         for key,value in mini_batch_loss_dict.items(): mini_batch_loss_dict[key] = np.mean(value)
-        
         mini_batch_loss_dict['Epoch'] = epoch
         wandb.log(mini_batch_loss_dict)
-        break
     
     # save model checkpoint
     setup_output_dir(config)
@@ -166,46 +168,28 @@ def pipeline(config):
     torch.save(checkpoint, f"{config['peripheral']['out_dir']}/checkpoint_epoch_{epoch+1}.pth")
 
     # plot validation example
-    x,y = next(iter(test_loader))
+    x, y = next(iter(test_loader))
+    x = x.to(device)
     with torch.no_grad():
         if len(x.shape) == 3:
             x = x.unsqueeze(-1)
         out = model(x)
     frames = plot_evaluation_gif(out,y, n=batch_size)
-    imageio.mimsave(f"{config['peripheral']['out_dir']}/validation_sample.gif", frames, duration=0.5)
-    np.save(f"{config['peripheral']['out_dir']}/validation_sample.npy", out.numpy())
-    media = wandb.Image(f"{config['peripheral']['out_dir']}/validation_sample.gif", caption=f"validation_sample")
+    imageio.mimsave(f"{config['peripheral']['out_dir']}/validation_sample.gif", frames, duration=0.5, loop=0)
+    np.save(f"{config['peripheral']['out_dir']}/validation_sample.npy", out.cpu().numpy())
+    media = wandb.Video(f"{config['peripheral']['out_dir']}/validation_sample.gif", caption=f"validation_sample")
     wandb.log({f"media/validation_sample": media})
 
-    # perfrom long-rollout
-    test_u = KF_flow_data(dataset_path, dataset_split, sub=dataset_sub, T_in=dataset_T_in, T_out=dataset_T_out, longrollout=True)
-    out = eval_longrollout(model, test_u[[1],...], T=test_u.shape[0], S=S)
+    # perfrom long-rollout (at full res)
+    test_u = KF_flow_data(dataset_path, dataset_split, sub=1, T_in=dataset_T_in, T_out=dataset_T_out, longrollout=True)
+    out = eval_longrollout(model, test_u[[1],...], T=test_u.shape[0], S=S*dataset_sub)
     
     cut_off = 100
     frames = plot_evaluation_gif(out[:cut_off,...],test_u[:cut_off,...], n=cut_off)
-    imageio.mimsave(f"{config['peripheral']['out_dir']}/long_rollout_sample.gif", frames, duration=0.1)
-    np.save(f"{config['peripheral']['out_dir']}/long_rollout_sample.npy", out.numpy())
-    media = wandb.Image(f"{config['peripheral']['out_dir']}/long_rollout_sample.gif", caption=f"long_rollout_sample")
+    imageio.mimsave(f"{config['peripheral']['out_dir']}/long_rollout_sample.gif", frames, duration=0.1, loop=0)
+    np.save(f"{config['peripheral']['out_dir']}/long_rollout_sample.npy", out.cpu().numpy())
+    media = wandb.Video(f"{config['peripheral']['out_dir']}/long_rollout_sample.gif", caption=f"long_rollout_sample")
     wandb.log({f"media/long_rollout_sample": media})
-
-def eval_longrollout(model, starting_u, T, S):
-    if len(starting_u.shape) == 3:
-        starting_u = starting_u.unsqueeze(-1)
-
-    channel_n = starting_u.shape[-1]
-    pred = torch.zeros_like(starting_u).repeat(T,1,1,1)
-    out = starting_u.reshape(1,S,S,channel_n).to(device)
-    pred[0,:,:,:] = out.view(S,S,channel_n)
-    with torch.no_grad():
-        for i in range(T-1):
-            out = model(out)
-            pred[i+1,:,:,:] = out.view(S,S,channel_n)
-    
-    return pred
-
-
-
-
 
 
 if __name__ == "__main__":

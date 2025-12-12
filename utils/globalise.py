@@ -57,6 +57,6 @@ class sweep_agent_wrapper():
 
         with wandb.init(config=None, group=group):
             self.base_config['parameters'].update(wandb.config)
-            #self.new_config = wandb.config.update(self.base_config)
-
+            wandb.config.update(self.base_config)
+            
             self.pipeline(self.base_config)
