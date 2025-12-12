@@ -118,7 +118,7 @@ for ep in range(1, epochs + 1):
     for x, y in train_loader:
         x = x.to(device).view(batch_size, S, S, in_dim)
         y = y.to(device).view(batch_size, S, S, out_dim)
-
+        
         out = model(x).reshape(batch_size, S, S, out_dim)
         data_loss = myloss(out, y)
         train_loss += data_loss.item()

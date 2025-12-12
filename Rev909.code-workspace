@@ -2,6 +2,18 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../../0 - Work Space/Markov Studies"
+		},
+		{
+			"path": "../../0 - Work Space/Markov Studies v2"
+		},
+		{
+			"path": "../Torch_VFM"
+		},
+		{
+			"path": "../Geo-FNO"
 		}
 	],
 	"settings": {

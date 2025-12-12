@@ -163,3 +163,7 @@ cython_debug/
 *.npy
 *.code-workspace
 /model
+/wandb
+/data
+/results
+*.gif

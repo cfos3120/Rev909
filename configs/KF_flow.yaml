@@ -1,0 +1,42 @@
+# Metadata
+wandb:
+  entity: "cfos3120-acfr-usyd"
+  project: "Rev909"
+  group: "test"
+  sweep_n: 27
+
+peripheral:
+  device: [0]
+  seed: 42
+  
+# parameters will get updated with sweeps
+parameters:
+  
+  # Net Parameters
+  model_name: 'FNO'
+  modes: 20
+  width: 64
+
+  # Training Parameters
+  epochs: 50
+  learning_rate: 0.0005
+  scheduler_step: 10
+  scheduler_gamma: 0.5
+  batch_size: 4
+  soblev_norm_order: 1
+  dissipation: True
+
+dataset_params:
+
+  # Dataset dependent Net configs
+  input_dim: 1
+  output_dim: 1
+
+  # Dataset Partition
+  name: Kolmogorov Flow
+  dataset_name: 2D_NS_Re40.npy
+  T_in: 100 
+  T_out: 400
+  sub: 1
+  split: 0.9
+  
