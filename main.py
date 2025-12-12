@@ -140,27 +140,31 @@ def pipeline(config):
         model.train()
 
         mini_batch_loss_dict = {}
-        for x, y in train_loader:
+        for i, (x, y) in enumerate(train_loader):
             x, y = x.to(device), y.to(device)
             loss, loss_dict = train_batch(model, x, y, train_loss_fn, sampling_class=regularizer)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            scheduler.step()
             if mini_batch_loss_dict == {}: mini_batch_loss_dict = {k: [] for k in loss_dict}
             for key, value in loss_dict.items(): mini_batch_loss_dict[key].append(value)
-        
+        print(f'Progress: {epoch:3n}/{epochs:3n} - {i:3n}/{len(train_loader):3n} | Training Loss: {loss.item():3.4f}', end="\r", flush=True)
+
         for x, y in test_loader:
             x, y = x.to(device), y.to(device)
             loss_dict = eval_batch(model, x, y, eval_loss_fn)
-            if not all(key in mini_batch_loss_dict for key in loss_dict):# loss_dict.keys() not in mini_batch_loss_dict.keys():
+            if not all(key in mini_batch_loss_dict for key in loss_dict):
                 for key in loss_dict: mini_batch_loss_dict[key] = []
             for key, value in loss_dict.items(): mini_batch_loss_dict[key].append(value)
+        
+        #print(f'Progress: {epoch:3n}/{epochs:3n} | Training Loss: {mini_batch_loss_dict["hx_data_loss"]:3.4f} | Validation Loss: {mini_batch_loss_dict["testing/l2_data_loss"]:3.4f}  ', end="\n", flush=True)
 
         # summarise epoch
         for key,value in mini_batch_loss_dict.items(): mini_batch_loss_dict[key] = np.mean(value)
         mini_batch_loss_dict['Epoch'] = epoch
         wandb.log(mini_batch_loss_dict)
+
+        scheduler.step()
     
     # save model checkpoint
     setup_output_dir(config)
