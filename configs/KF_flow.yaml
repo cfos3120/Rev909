@@ -26,6 +26,9 @@ parameters:
   soblev_norm_order: 1
   dissipation: True
 
+  # 
+  grad_method: 'FDM'  # 'autograd' | 'FDM' | 'FVM' | 'Spectral'
+
 dataset_params:
 
   # Dataset dependent Net configs

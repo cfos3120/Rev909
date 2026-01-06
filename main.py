@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import wandb
 from timeit import default_timer
-from my_utils import parse_args, HsLoss_real
+from my_utils import parse_args, HsLoss_real, periodic_FVM, periodic_derivatives
 from utils.dataloader import KF_flow_data
 import socket
 import yaml
@@ -107,6 +107,7 @@ def eval_longrollout(model, starting_u, T, S):
 
 def pipeline(config):
 
+    grad_method     = config['parameters']['grad_method']
     epochs          = config['parameters']['epochs']
     learning_rate   = config['parameters']['learning_rate']
     scheduler_step  = config['parameters']['scheduler_step']
@@ -124,6 +125,12 @@ def pipeline(config):
 
     train_loader, test_loader, S, max_norm = KF_flow_data(dataset_path, dataset_split, batch_size=batch_size, sub=dataset_sub, T_in=dataset_T_in, T_out=dataset_T_out)
     
+    GRAD_FUNCTIONS = {'FDM': periodic_derivatives,
+                      'FVM': periodic_FVM(S=S,device=device),
+                      #'Autograd':,
+                      #'Spectral:'
+                      }
+    
     if config['parameters']['dissipation']:
         regularizer = RegulatorSampler(radii=[max_norm, max_norm*4], shape=(S, S, 1), scale_down_factor=0.5, weight=0.01)
     else:
@@ -133,8 +140,15 @@ def pipeline(config):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step, gamma=scheduler_gamma)
-    train_loss_fn = HsLoss_real(group=True, size_average=False, k=k)
-    eval_loss_fn = HsLoss_real(group=False, size_average=False)
+
+    grad_calculator = GRAD_FUNCTIONS[grad_method]
+
+    if grad_method == 'Spectral':
+        train_loss_fn = HsLoss(group=True, size_average=False, k=k)
+        eval_loss_fn = HsLoss(group=False, size_average=False)
+    else:
+        train_loss_fn = HsLoss_real(grad_calculator=grad_calculator, group=True, size_average=False, k=k)
+        eval_loss_fn = HsLoss_real(grad_calculator=grad_calculator, group=False, size_average=False)
     
     for epoch in range(epochs):
         model.train()

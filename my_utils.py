@@ -1,11 +1,16 @@
 import torch
 import numpy as np
 import argparse
+from types import SimpleNamespace
+import sys
+
+sys.path.insert(0, r'C:\Users\Noahc\Documents\USYD\PHD\8 - Github\Torch_VFM')
+from src.physics.operators import Divergence_Operator
 
 def parse_args():
     parser = argparse.ArgumentParser("Train the Markov Neural Operator")
     parser.add_argument('--config', type=str, help="json configuration file")
-    parser.add_argument('--wandb', type=str, help="wandb mode", choices=['online','offline','disabled'], default='offline')
+    parser.add_argument('--wandb', type=str, help="wandb mode", choices=['online','offline','disabled'], default='disabled')
     parser.add_argument('--sweep', type=str, help="sweep json file")
     args = parser.parse_args()
     return args
@@ -39,7 +44,134 @@ def periodic_derivatives(x, dx=1.0, dy=1.0):
     dx2 = (x_ip - 2.0 * x + x_im) / (dx * dx)
     dy2 = (y_ip - 2.0 * x + y_im) / (dy * dy)
 
-    return dx1, dy1, dx2, dy2
+    grad_dict = {'dwdx':dx1,
+                 'dwdy':dy1,
+                 'dwdxx':dx2,
+                 'dwdyy':dy2
+                 }
+    
+    return grad_dict
+
+def create_periodic_fvm_connectivity(S):
+    owner_list = []
+    neighbour_list = []
+    normal_list = []
+    
+    # Horizontal faces: (i,j) -> (i, j+1), normal points right (+x direction)
+    for i in range(S):
+        for j in range(S):
+            owner = i * S + j
+            neigh = i * S + (j + 1) % S
+            owner_list.append(owner)
+            neighbour_list.append(neigh)
+            #normal_list.append([1.0, 0.0])  # unit normal: right (+x)
+            normal_list.append([0.0, 1.0])
+    
+    # Vertical faces: (i,j) -> (i+1, j), normal points up (+y direction)  
+    for i in range(S):
+        for j in range(S):
+            owner = i * S + j
+            neigh = ((i + 1) % S) * S + j
+            owner_list.append(owner)
+            neighbour_list.append(neigh)
+            #normal_list.append([0.0, 1.0])  # unit normal: up (+y)
+            normal_list.append([1.0, 0.0])
+    
+    owner = torch.tensor(owner_list, dtype=torch.int64)
+    neighbour = torch.tensor(neighbour_list, dtype=torch.int64)
+    normals = torch.tensor(normal_list, dtype=torch.float32)
+    
+    return owner, neighbour, normals
+
+class periodic_isometric_grid(object):
+    def __init__(self, L=2*np.pi, S=10, device='cpu', dtype=torch.float32):
+        
+        self.device = torch.device(device)
+        face_length = 2*np.pi/S
+        cell_area = face_length**2
+
+        self.mesh = SimpleNamespace()
+        self.mesh.dim = 2 # default is 3, not sure if operators optimized for 2D
+        self.mesh.n_cells = S**2
+        self.mesh.patch_face_keys = {} # periodicity enforced through cell neighbours
+        self.mesh.face_owners, self.mesh.face_neighbors, normals = create_periodic_fvm_connectivity(S)
+        self.mesh.face_areas = normals.to(dtype)*face_length
+        self.mesh.num_internal_faces = len(self.mesh.face_owners)
+        self.mesh.internal_faces = torch.arange(self.mesh.num_internal_faces)
+        self.mesh.face_areas_mag = torch.tensor([face_length],dtype=dtype).repeat(self.mesh.num_internal_faces)
+        self.mesh.cell_volumes = torch.tensor([cell_area],dtype=dtype).repeat(self.mesh.n_cells) 
+
+        # create cell_centres
+        self.mesh.cell_centers = self.fetch_2d_grid(L, S)
+        self.mesh.cell_center_vectors = self.mesh.cell_centers[self.mesh.face_neighbors] - self.mesh.cell_centers[self.mesh.face_owners]
+        self.mesh.cell_center_vectors -= L * np.round(self.mesh.cell_center_vectors / L) # correct for periodicity
+
+        # none `mesh` namespace objects
+        self.correction_method = None
+        self.delta = normals.to(dtype)
+        self.delta_mag = torch.norm(self.delta, dim=-1, keepdim=False).to(dtype) # should be all ones because they are unit vectors
+        self.d = self.mesh.cell_center_vectors.to(dtype)
+        self.d_mag = torch.norm(self.d, dim=-1, keepdim=False).to(dtype)
+        self.internal_face_weights = torch.tensor([0.5]).repeat(self.mesh.num_internal_faces) # equidistant on isometric mesh
+        
+        # expand to 3D:
+        if self.mesh.dim == 3:
+            self.mesh.face_areas = torch.nn.functional.pad(self.mesh.face_areas, (0, 1), value=0.0)
+            self.delta = torch.nn.functional.pad(self.delta, (0, 1), value=0.0)
+            self.d = torch.nn.functional.pad(self.delta, (0, 1), value=0.0)
+
+        # send all to device
+        self.to(device)
+        
+    def fetch_2d_grid(self,L, S):
+        line_grid = np.linspace(0,2*np.pi,S+1, endpoint=True)[1:]
+        line_grid = line_grid-(line_grid[-1]-line_grid[-2])/2
+        X, Y = np.meshgrid(line_grid,line_grid, indexing='ij')
+        coords = np.concatenate([X[...,None], Y[...,None]], axis=-1)
+        coords_r = torch.tensor(coords.reshape(-1,2))
+        return coords_r
+
+    def to(self,device):
+        for attr_name, attr_value in vars(self.mesh).items():
+            if isinstance(attr_value, torch.Tensor):
+                setattr(self.mesh, attr_name, attr_value.to(device))
+
+        for attr_name, attr_value in vars(self).items():
+            if isinstance(attr_value, torch.Tensor):
+                setattr(self, attr_name, attr_value.to(device))
+
+class periodic_FVM(object):
+    def __init__(self, S, device='cpu', L=2*np.pi):
+        self.mesh = periodic_isometric_grid(L=L, S=S, device=device)
+        self.S = S
+
+    def __call__(self, x, **kwargs):
+        
+        if len(x.shape) == 3:
+            x = x.unsqueeze(-1)
+        B, S, __, C = x.shape
+        x = x.reshape(B,1,S*S,C)
+
+        _, grad_pred = Divergence_Operator.caclulate(self.mesh, field=x)
+        grad_2nd_pred = Gradient_2nd_Operator.caclulate(self.mesh, field=x)
+        
+        # If vorticity function (assuming 2D)
+        if x.shape[-1] == 1 :
+            grad_dict = {'dwdx':grad_pred[...,[0]],
+                         'dwdy':grad_pred[...,[1]],
+                         'dwdxx':grad_2nd_pred[...,[0]],
+                         'dwdyy':grad_2nd_pred[...,[3]]
+                         }
+
+        # If velocity function (assuming 2D)
+        else:
+            grad_dict = {'dudx':grad_pred[...,[0]], 'dvdx':grad_pred[...,[1]],
+                         'dudy':grad_pred[...,[2]], 'dvdy':grad_pred[...,[3]],
+                         'dudxx':grad_2nd_pred[...,[0]], 'dvdxx':grad_2nd_pred[...,[1]],
+                         'dudyy':grad_2nd_pred[...,[6]], 'dvdyy':grad_2nd_pred[...,[7]]
+                         }
+
+        return grad_dict
 
 class HsLoss_real(object):
     def __init__(self,
@@ -66,7 +198,7 @@ class HsLoss_real(object):
 
         if a == None:
             self.a = [1,1,1]
-
+        
         self.grad_function = grad_calculator
 
     def rel(self, x, y):
@@ -88,8 +220,11 @@ class HsLoss_real(object):
             return self.rel(x, y)
 
         dh = 2*np.pi/x.shape[-2]
-        x_dx1, x_dy1, x_dx2, x_dy2 = self.grad_function(x, dx=dh, dy=dh)
-        y_dx1, y_dy1, y_dx2, y_dy2 = self.grad_function(y, dx=dh, dy=dh)
+        # TODO: extend to cartesian velocity
+        x_grad_dict = self.grad_function(x, dx=dh, dy=dh)
+        y_grad_dict = self.grad_function(y, dx=dh, dy=dh)
+        x_dx1, x_dy1, x_dx2, x_dy2 = [x_grad_dict[i] for i in ['dwdx','dwdy','dwdxx','dwdyy']]
+        y_dx1, y_dy1, y_dx2, y_dy2 = [y_grad_dict[i] for i in ['dwdx','dwdy','dwdxx','dwdyy']]
 
         if self.balanced==False:
             weight_x = x**2
@@ -118,6 +253,8 @@ class HsLoss_real(object):
             loss = loss / (k+1)
 
         return loss
+
+
 
 def spectrum2(u, s):
     T = u.shape[0]
