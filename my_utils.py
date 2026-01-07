@@ -3,9 +3,14 @@ import numpy as np
 import argparse
 from types import SimpleNamespace
 import sys
+import socket
 
-sys.path.insert(0, r'C:\Users\Noahc\Documents\USYD\PHD\8 - Github\Torch_VFM')
-from src.physics.operators import Divergence_Operator
+if socket.gethostname() == 'DESKTOP-157DQSC':
+    sys.path.insert(0, r'C:\Users\Noahc\Documents\USYD\PHD\8 - Github\Torch_VFM')
+else:
+    sys.path.insert(0, r'/home/n.foster/Torch_VFM')
+
+from src.physics.operators import Divergence_Operator, Gradient_2nd_Operator
 
 def parse_args():
     parser = argparse.ArgumentParser("Train the Markov Neural Operator")
@@ -170,6 +175,9 @@ class periodic_FVM(object):
                          'dudxx':grad_2nd_pred[...,[0]], 'dvdxx':grad_2nd_pred[...,[1]],
                          'dudyy':grad_2nd_pred[...,[6]], 'dvdyy':grad_2nd_pred[...,[7]]
                          }
+
+        for key, value in grad_dict.items():
+            grad_dict[key] = value.reshape(B,S,S,1)
 
         return grad_dict
 

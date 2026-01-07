@@ -141,12 +141,11 @@ def pipeline(config):
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step, gamma=scheduler_gamma)
 
-    grad_calculator = GRAD_FUNCTIONS[grad_method]
-
     if grad_method == 'Spectral':
         train_loss_fn = HsLoss(group=True, size_average=False, k=k)
         eval_loss_fn = HsLoss(group=False, size_average=False)
     else:
+        grad_calculator = GRAD_FUNCTIONS[grad_method]
         train_loss_fn = HsLoss_real(grad_calculator=grad_calculator, group=True, size_average=False, k=k)
         eval_loss_fn = HsLoss_real(grad_calculator=grad_calculator, group=False, size_average=False)
     

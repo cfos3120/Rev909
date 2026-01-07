@@ -2,7 +2,7 @@
 wandb:
   entity: "cfos3120-acfr-usyd"
   project: "Rev909"
-  group: "Re40"
+  group: "Re500"
   sweep_n: 27
 
 peripheral:
@@ -37,7 +37,7 @@ dataset_params:
 
   # Dataset Partition
   name: Kolmogorov Flow
-  dataset_name: 2D_NS_Re40.npy #2D_NS_Re40.npy
+  dataset_name: 2D_NS_Re500.npy #2D_NS_Re40.npy
   T_in: 100 
   T_out: 400
   sub: 1

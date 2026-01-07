@@ -281,8 +281,9 @@ class HsLoss(object):
         self.size_average = size_average
 
         if a == None:
-            a = [1,] * k
-        self.a = a
+            self.a = [1,1,1]
+        else:
+            self.a = a
 
     def rel(self, x, y):
         num_examples = x.size()[0]
@@ -295,10 +296,11 @@ class HsLoss(object):
                 return torch.sum(diff_norms/y_norms)
         return diff_norms/y_norms
 
-    def __call__(self, x, y, a=None):
+    def __call__(self, x, y, a=None, k=None):
         nx = x.size()[1]
         ny = x.size()[2]
-        k = self.k
+        if k is None:
+            k = self.k
         balanced = self.balanced
         a = self.a
         x = x.view(x.shape[0], nx, ny, -1)
@@ -311,6 +313,9 @@ class HsLoss(object):
 
         x = torch.fft.fftn(x, dim=[1, 2])
         y = torch.fft.fftn(y, dim=[1, 2])
+
+        if k == 0:
+            return self.rel(x, y)
 
         if balanced==False:
             weight = 1

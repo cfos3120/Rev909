@@ -6,7 +6,7 @@ parameters:
   dissipation:
     values: [True, False]
   grad_method:
-   values: ['Spectral', 'FVM', 'FDM']
+    values: ['Spectral', 'FVM']
 
 metric:
   name: loss
