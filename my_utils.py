@@ -150,34 +150,42 @@ class periodic_FVM(object):
         self.mesh = periodic_isometric_grid(L=L, S=S, device=device)
         self.S = S
 
+        if self.mesh.mesh.dim == 2:
+            self.scalar_1st_idx = {'dwdx':[0],'dwdy':[1]}
+            self.scalar_2nd_idx = {'dwdxx':[0],'dwdyy':[3]}
+            self.vector_1st_idx = {'dwdx':[0,1],'dwdy':[2,3]}
+            self.vector_2nd_idx = {'dwdxx':[0,1],'dwdyy':[6,7]}
+        else:
+            raise NotImplementedError
+
     def __call__(self, x, **kwargs):
         
         if len(x.shape) == 3:
             x = x.unsqueeze(-1)
-        B, S, __, C = x.shape
-        x = x.reshape(B,1,S*S,C)
+        B, H, W, C = x.shape
+        x = x.reshape(B,1,H*W,C)
 
         _, grad_pred = Divergence_Operator.caclulate(self.mesh, field=x)
         grad_2nd_pred = Gradient_2nd_Operator.caclulate(self.mesh, field=x)
         
         # If vorticity function (assuming 2D)
-        if x.shape[-1] == 1 :
-            grad_dict = {'dwdx':grad_pred[...,[0]],
-                         'dwdy':grad_pred[...,[1]],
-                         'dwdxx':grad_2nd_pred[...,[0]],
-                         'dwdyy':grad_2nd_pred[...,[3]]
-                         }
-
-        # If velocity function (assuming 2D)
+        if C == 1:
+            idx_1st = self.scalar_1st_idx
+            idx_2nd = self.scalar_2nd_idx
+        elif C == 2:
+            idx_1st = self.vector_1st_idx
+            idx_2nd = self.vector_2nd_idx
         else:
-            grad_dict = {'dudx':grad_pred[...,[0]], 'dvdx':grad_pred[...,[1]],
-                         'dudy':grad_pred[...,[2]], 'dvdy':grad_pred[...,[3]],
-                         'dudxx':grad_2nd_pred[...,[0]], 'dvdxx':grad_2nd_pred[...,[1]],
-                         'dudyy':grad_2nd_pred[...,[6]], 'dvdyy':grad_2nd_pred[...,[7]]
-                         }
+            raise ValueError(f'Input x of shape {x.shape} has {C} channels, if passing more than 2 channels, either 3D or velocity-pressure couple needs to be indexed')
+
+        grad_dict = {'dwdx':grad_pred[...,idx_1st['dwdx']],
+                        'dwdy':grad_pred[...,idx_1st['dwdy']],
+                        'dwdxx':grad_2nd_pred[...,idx_2nd['dwdxx']],
+                        'dwdyy':grad_2nd_pred[...,idx_2nd['dwdyy']]
+                        }
 
         for key, value in grad_dict.items():
-            grad_dict[key] = value.reshape(B,S,S,1)
+            grad_dict[key] = value.reshape(B,H,W,C)
 
         return grad_dict
 

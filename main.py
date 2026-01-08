@@ -22,10 +22,11 @@ np.random.seed(42)
 if socket.gethostname() == 'DESKTOP-157DQSC':
     device = torch.device('cpu')
     data_path = r"C:\Users\Noahc\Documents\USYD\PHD\0 - Work Space\Markov Studies"#\2D_NS_Re40.npy"
+    DEBUG = True
 else:
     device = torch.device('cuda')
     data_path = "/home/n.foster/datasets" #2D_NS_Re500.npy"
-
+    DEBUG = False
 
 class RegulatorSampler():
     def __init__(self, 
@@ -113,8 +114,8 @@ def pipeline(config):
     scheduler_step  = config['parameters']['scheduler_step']
     scheduler_gamma = config['parameters']['scheduler_gamma']
     batch_size      = config['parameters']['batch_size']
-    out_dim         = config['dataset_params']['input_dim']
-    in_dim          = config['dataset_params']['output_dim']
+    in_dim          = config['dataset_params']['input_dim']
+    out_dim         = config['dataset_params']['output_dim']
     k               = config['parameters']['soblev_norm_order']
     dataset_name    = config['dataset_params']['dataset_name']
     dataset_split   = config['dataset_params']['split']
@@ -123,7 +124,18 @@ def pipeline(config):
     dataset_T_out   = config['dataset_params']['T_out']
     dataset_path = f'{data_path}/{dataset_name}'
 
-    train_loader, test_loader, S, max_norm = KF_flow_data(dataset_path, dataset_split, batch_size=batch_size, sub=dataset_sub, T_in=dataset_T_in, T_out=dataset_T_out)
+    if config['dataset_params']['name'] == 'Kolmogorov Flow' and out_dim == 2:
+        velocity_f = True
+    else:
+        velocity_f = False
+
+    train_loader, test_loader, S, max_norm = KF_flow_data(dataset_path, 
+                                                          dataset_split, 
+                                                          batch_size=batch_size, 
+                                                          sub=dataset_sub, 
+                                                          T_in=dataset_T_in, 
+                                                          T_out=dataset_T_out,
+                                                          convert_to_u=velocity_f)
     
     GRAD_FUNCTIONS = {'FDM': periodic_derivatives,
                       'FVM': periodic_FVM(S=S,device=device),
@@ -132,7 +144,7 @@ def pipeline(config):
                       }
     
     if config['parameters']['dissipation']:
-        regularizer = RegulatorSampler(radii=[max_norm, max_norm*4], shape=(S, S, 1), scale_down_factor=0.5, weight=0.01)
+        regularizer = RegulatorSampler(radii=[max_norm, max_norm*4], shape=(S, S, out_dim), scale_down_factor=0.5, weight=0.01)
     else:
         regularizer = None
     
@@ -155,12 +167,14 @@ def pipeline(config):
         mini_batch_loss_dict = {}
         for i, (x, y) in enumerate(train_loader):
             x, y = x.to(device), y.to(device)
+
             loss, loss_dict = train_batch(model, x, y, train_loss_fn, sampling_class=regularizer)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             if mini_batch_loss_dict == {}: mini_batch_loss_dict = {k: [] for k in loss_dict}
             for key, value in loss_dict.items(): mini_batch_loss_dict[key].append(value)
+            if DEBUG: break
         print(f'Progress: {epoch:3n}/{epochs:3n} - {i:3n}/{len(train_loader):3n} | Training Loss: {loss.item():3.4f}', end="\r", flush=True)
 
         for x, y in test_loader:
@@ -169,7 +183,8 @@ def pipeline(config):
             if not all(key in mini_batch_loss_dict for key in loss_dict):
                 for key in loss_dict: mini_batch_loss_dict[key] = []
             for key, value in loss_dict.items(): mini_batch_loss_dict[key].append(value)
-        
+            if DEBUG: break
+        if DEBUG: break
         #print(f'Progress: {epoch:3n}/{epochs:3n} | Training Loss: {mini_batch_loss_dict["hx_data_loss"]:3.4f} | Validation Loss: {mini_batch_loss_dict["testing/l2_data_loss"]:3.4f}  ', end="\n", flush=True)
 
         # summarise epoch
@@ -185,6 +200,7 @@ def pipeline(config):
     torch.save(checkpoint, f"{config['peripheral']['out_dir']}/checkpoint_epoch_{epoch+1}.pth")
 
     # plot validation example
+    #if not DEBUG:
     x, y = next(iter(test_loader))
     x = x.to(device)
     with torch.no_grad():
@@ -198,10 +214,10 @@ def pipeline(config):
     wandb.log({f"media/validation_sample": media})
 
     # perfrom long-rollout (at full res)
-    test_u = KF_flow_data(dataset_path, dataset_split, sub=1, T_in=dataset_T_in, T_out=dataset_T_out, longrollout=True)
+    test_u = KF_flow_data(dataset_path, dataset_split, sub=1, T_in=dataset_T_in, T_out=dataset_T_out, longrollout=True,convert_to_u=velocity_f)
     out = eval_longrollout(model, test_u[[1],...], T=test_u.shape[0], S=S*dataset_sub)
     
-    cut_off = 100
+    cut_off = 5 if DEBUG else 100
     frames = plot_evaluation_gif(out[:cut_off,...],test_u[:cut_off,...], n=cut_off)
     imageio.mimsave(f"{config['peripheral']['out_dir']}/long_rollout_sample.gif", frames, duration=0.1, loop=0)
     np.save(f"{config['peripheral']['out_dir']}/long_rollout_sample.npy", out.cpu().numpy())
