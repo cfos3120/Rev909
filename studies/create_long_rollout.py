@@ -72,24 +72,32 @@ def eval_model_long_rollout(config, file_name):
     S = test_u.shape[1]
     model = Net2d(in_dim=in_dim, out_dim=out_dim, domain_size=S, modes=20, width=64).to(device)
 
+    ckpt_path = f"{config['peripheral']['out_dir']}/checkpoint_epoch_50.pth"
+    checkpoint = torch.load(ckpt_path)
+    model.load_state_dict(checkpoint['model_state_dict'])
+
     start_t = time.perf_counter()
     out = eval_longrollout(model, test_u[[1],...], T=T_rollout, S=S*dataset_sub)
     end_t = time.perf_counter()
-    print(f'Complete in: {(end_t-start_t)/60} minutes')
-    #np.save(f"{config['peripheral']['out_dir']}/{file_name}.npy", out.cpu().numpy())
+    print(f'Completed in: {(end_t-start_t)/60:4f} minutes')
+    np.save(f"{config['peripheral']['out_dir']}/{file_name}.npy", out.cpu().numpy())
 
 if __name__ == "__main__":
 
     cwd = Path.cwd()        # current working directory
     parent = cwd.parent     # parent directory
-    path = rf'{Path(__file__).parent.parent}\results\SWEEP-4i397axx'
+    path = rf'{Path(__file__).parent.parent}/results/Rev909/SWEEP-cgaf3jfu'
 
     project = 'Rev909'
     for folder in os.listdir(path):
-        print(f'Rolling out case: {folder}')
+        print(f'Rolling out case: {folder}', end=' ')
         config_file, run_id = retrieve_wandb_config(folder.rsplit("-", 1)[0], project, entity="cfos3120-acfr-usyd")
+          
+        # need to correct for some reason on HPC
+        if socket.gethostname() != 'DESKTOP-157DQSC':
+            config_file['peripheral']['out_dir'] = f'{path}/{folder}'
+        
         eval_model_long_rollout(config=config_file, file_name='long_rollout_10000.npy')
 
-
-        break
+    print('Rollout of sweep complete')
 

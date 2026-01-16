@@ -2,7 +2,7 @@
 wandb:
   entity: "cfos3120-acfr-usyd"
   project: "Rev909"
-  group: "Re40"
+  group: "Re40-u"
   sweep_n: 27
 
 peripheral:
@@ -32,8 +32,8 @@ parameters:
 dataset_params:
 
   # Dataset dependent Net configs
-  input_dim: 1
-  output_dim: 1
+  input_dim: 2
+  output_dim: 2
 
   # Dataset Partition
   name: Kolmogorov Flow
