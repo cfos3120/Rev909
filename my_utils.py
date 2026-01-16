@@ -189,6 +189,55 @@ class periodic_FVM(object):
 
         return grad_dict
 
+class FVM_2D(object):
+    def __init__(self, mesh, Ravler, device='cpu'):
+        self.mesh = mesh
+        self.Ravler = Ravler
+
+        if self.mesh.mesh.dim == 2:
+            self.scalar_1st_idx = {'dwdx':[0],'dwdy':[1]}
+            self.scalar_2nd_idx = {'dwdxx':[0],'dwdyy':[3]}
+            self.vector_1st_idx = {'dwdx':[0,1],'dwdy':[2,3]}
+            self.vector_2nd_idx = {'dwdxx':[0,1],'dwdyy':[6,7]}
+        else:
+            raise NotImplementedError
+
+    def __call__(self, x, **kwargs):
+        
+        
+        if len(x.shape) == 3:
+            x = x.unsqueeze(-1)
+        B, H, W, C = x.shape
+
+        x = self.Ravler.to(x, forward=False)
+        x = x.reshape(B,1,H*W,C)
+
+        _, grad_pred = Divergence_Operator.caclulate(self.mesh, field=x)
+        grad_2nd_pred = Gradient_2nd_Operator.caclulate(self.mesh, field=x)
+        
+        # If vorticity function (assuming 2D)
+        assert C == 2
+        if C == 1:
+            raise NotImplementedError
+            idx_1st = self.scalar_1st_idx
+            idx_2nd = self.scalar_2nd_idx
+        elif C == 2:
+            idx_1st = self.vector_1st_idx
+            idx_2nd = self.vector_2nd_idx
+        else:
+            raise ValueError(f'Input x of shape {x.shape} has {C} channels, if passing more than 2 channels, either 3D or velocity-pressure couple needs to be indexed')
+
+        grad_dict = {'dwdx':grad_pred[...,idx_1st['dwdx']],
+                        'dwdy':grad_pred[...,idx_1st['dwdy']],
+                        'dwdxx':grad_2nd_pred[...,idx_2nd['dwdxx']],
+                        'dwdyy':grad_2nd_pred[...,idx_2nd['dwdyy']]
+                        }
+
+        for key, value in grad_dict.items():
+            grad_dict[key] = self.Ravler.to(value.squeeze(1), forward=True).reshape(B,H,W,C)
+
+        return grad_dict
+    
 class HsLoss_real(object):
     def __init__(self,
                  grad_calculator = periodic_derivatives,
@@ -300,96 +349,5 @@ def spectrum2(u, s):
     spectrum = spectrum.mean(axis=0)
     return spectrum
      
-class AngularMeshRavel:
-    def __init__(self, points, m=59, n=356):
-        """
-        Initialize the mesh unravel/ravel utility for an angular mesh.
-        
-        points : ndarray of shape [p, 2], Cartesian coordinates of mesh points
-        m : int, number of radial layers expected
-        n : int, number of angular points expected per layer
-        
-        This class sorts and groups points into radial layers and angular order,
-        allowing forward unraveling to shape [m, n, 2] and inverse raveling to original [p, 2].
-        """
-        self.points = points
-        self.m = m
-        self.n = n
-        
-        # Compute polar coordinates for sorting and grouping
-        x, y = points[:, 0], points[:, 1]
-        self.r = np.sqrt(x**2 + y**2)
-        self.theta = np.arctan2(y, x)
-        
-        # Sort points by radius and group indices to m radial layers
-        sort_idx = np.argsort(self.r)
-        p = points.shape[0]
-        group_size = p // m
-        self.radius_groups = []
-        for i in range(m):
-            start = i * group_size
-            end = min((i+1) * group_size, p) if i < m-1 else p
-            group_idx = sort_idx[start:end]
-            self.radius_groups.append(group_idx)
-    
-    def _compute_unique_coords(self):
-        """Compute representative radii and angles for each layer."""
-        self.unique_radii = np.zeros(self.m)
-        self.unique_angles = np.zeros(self.n)
-        
-        # Representative radius: mean radius per layer
-        for i, group_idx in enumerate(self.radius_groups):
-            self.unique_radii[i] = np.mean(self.r[group_idx])
-        
-        # Representative angles: evenly spaced (for plotting continuity)
-        # Could use mean angles per angular position across radii if desired
-        self.unique_angles = np.linspace(0, 2*np.pi, self.n, endpoint=False)
-        return self.unique_angles, self.unique_radii
 
-    def to(self, arr, forward=True):
-        """
-        Transform arr between unraveled [m, n, ...] and raveled [p, ...] formats.
-        
-        arr : input data array to transform (coordinates, scalar or vector values)
-              Shape must align with either [p, ...] if forward=True or [m, n, ...] if forward=False
-        forward : bool, True = forward unraveling [p, ...] -> [m, n, ...], 
-                        False = inverse raveling [m, n, ...] -> [p, ...]
-        
-        Returns transformed array with reshaped/reordered data.
-        """
-        if forward:
-            # Validate input shape
-            assert arr.shape[0] == self.points.shape[0], f"Input length {arr.shape[0]} mismatch, expected {self.points.shape[0]}"
-            # Initialize output container
-            out_shape = (self.m, self.n) + arr.shape[1:]
-            unraveled = np.zeros(out_shape, dtype=arr.dtype)
-            
-            for i, group_idx in enumerate(self.radius_groups):
-                group_arr = arr[group_idx]
-                # sort group by angle for continuity
-                group_theta = self.theta[group_idx]
-                sort_order = np.argsort(group_theta)
-                sorted_arr = group_arr[sort_order]
-                length = min(self.n, sorted_arr.shape[0])
-                unraveled[i, :length] = sorted_arr[:length]
-            
-            return unraveled
-        else:
-            # inverse transform from [m, n, ...] to [p, ...]
-            # initialize output container
-            p = self.points.shape[0]
-            raveled = np.zeros((p,) + arr.shape[2:], dtype=arr.dtype) if arr.ndim > 3 else np.zeros((p,), dtype=arr.dtype)
-            idx_pos = 0
-            for i, group_idx in enumerate(self.radius_groups):
-                length = len(group_idx)
-                data_to_ravel = arr[i, :min(self.n, length)]
-                # reorder to original order before grouping (angular ordering was applied)
-                group_theta = self.theta[group_idx]
-                sort_order = np.argsort(group_theta)
-                inv_sort_order = np.argsort(sort_order)
-                data_original_order = data_to_ravel[inv_sort_order]
-                raveled[group_idx] = data_original_order
-                idx_pos += length
-            
-            return raveled
             

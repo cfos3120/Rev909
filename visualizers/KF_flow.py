@@ -11,6 +11,12 @@ def plot_evaluation_gif(out,y, n=10):
     #N = out.shape[0]
     #random_indices = random.sample(range(N), n)
 
+    if out.shape[1] == out.shape[2]:
+        aspect = 'equal'
+    else:
+        aspect = 'auto'
+
+
     frames = []
 
     for idx in range(out.shape[0]):
@@ -22,9 +28,9 @@ def plot_evaluation_gif(out,y, n=10):
         error_img = a_img - b_img
         
         # Heatmaps
-        im0 = axes[0].imshow(a_img, cmap='viridis', aspect='equal')
-        im1 = axes[1].imshow(b_img, cmap='viridis', aspect='equal')
-        im2 = axes[2].imshow(error_img, cmap='plasma', aspect='equal')
+        im0 = axes[0].imshow(a_img, cmap='viridis', aspect=aspect)
+        im1 = axes[1].imshow(b_img, cmap='viridis', aspect=aspect)
+        im2 = axes[2].imshow(error_img, cmap='plasma', aspect=aspect)
         
         # Titles
         axes[0].set_title('Dataset')
@@ -35,6 +41,8 @@ def plot_evaluation_gif(out,y, n=10):
         for ax in axes:
             ax.set_xticks([])
             ax.set_yticks([])
+            if aspect == 'auto':
+                ax.set_box_aspect(1)
         
         # Add horizontal colorbars below each subplot
         cbar0 = fig.colorbar(im0, ax=axes[0], orientation='horizontal', fraction=0.046, pad=0.1)

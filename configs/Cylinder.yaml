@@ -1,0 +1,46 @@
+# Metadata
+wandb:
+  entity: "cfos3120-acfr-usyd"
+  project: "Cylinder"
+  group: "v1"
+  sweep_n: 27
+
+peripheral:
+  device: [0]
+  seed: 42
+  
+# parameters will get updated with sweeps
+parameters:
+  
+  # Net Parameters
+  model_name: 'FNO'
+  modes: 12
+  width: 32
+
+  # Training Parameters
+  epochs: 50
+  learning_rate: 0.0005
+  scheduler_step: 10
+  scheduler_gamma: 0.5
+  batch_size: 50
+  soblev_norm_order: 2
+  dissipation: True
+
+  # 
+  grad_method: 'FVM'  # 'autograd' | 'FDM' | 'FVM' | 'Spectral'
+
+dataset_params:
+
+  # Dataset dependent Net configs
+  input_dim: 2
+  output_dim: 2
+
+  # Dataset Partition
+  name: Cylinder
+  dataset_name: RAS_Re100k.npy
+  openfoam_case_dir: cylinder_mno_turb5/case.foam
+  sub: 1
+  split: 0.9
+  radii: 59 # these are mesh dependent (should be precalculated)
+  angles: 356
+  
