@@ -23,11 +23,13 @@ parameters:
   scheduler_step: 10
   scheduler_gamma: 0.5
   batch_size: 50
-  soblev_norm_order: 2
+  soblev_norm_order: 1
   dissipation: True
 
   # 
   grad_method: 'FVM'  # 'autograd' | 'FDM' | 'FVM' | 'Spectral'
+  volume_weighting: False # Weights derivative fields before loss calculation
+  loss_order_weights: None # takes list e.g. [1,1,1] for H0, H1, H2
 
 dataset_params:
 

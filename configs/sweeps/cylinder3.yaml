@@ -1,0 +1,12 @@
+method: grid
+
+parameters:
+  volume_weighting:
+    values: [True, False]
+  loss_order_weights:
+    values: [[1,0.05,1], [1,0.1,1], [1,0.5,1], [1,1,1]]
+
+
+metric:
+  name: loss
+  goal: minimize

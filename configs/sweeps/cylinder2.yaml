@@ -1,0 +1,19 @@
+method: grid
+
+parameters:
+  soblev_norm_order:
+    values: [2,1]
+  learning_rate:
+    values: [0.00005, 0.0001, 0.001, 0.0015]
+  modes:
+    values: [12,20]
+  width:
+    values: [32,64]
+  dissipation:
+    values: [True]
+  epochs:
+    values: [50]
+
+metric:
+  name: loss
+  goal: minimize
