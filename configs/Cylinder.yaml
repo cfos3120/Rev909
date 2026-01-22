@@ -23,8 +23,9 @@ parameters:
   scheduler_step: 10
   scheduler_gamma: 0.5
   batch_size: 50
-  soblev_norm_order: 2
+  soblev_norm_order: 1
   dissipation: True
+  diss_xy: False
 
   # 
   grad_method: 'FVM'  # 'autograd' | 'FDM' | 'FVM' | 'Spectral'

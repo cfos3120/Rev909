@@ -18,7 +18,7 @@
 	],
 	"settings": {
 		"workbench.preferredDarkColorTheme": "Monokai Dimmed",
-		"workbench.colorTheme": "Monokai Dimmed",
+		"workbench.colorTheme": "Quiet Light",
 		"workbench.preferredHighContrastColorTheme": "Default High Contrast",
 		"workbench.preferredLightColorTheme": "Quiet Light",
 		"workbench.iconTheme": "vs-seti"

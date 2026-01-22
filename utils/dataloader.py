@@ -107,8 +107,8 @@ def Cylinder_data(path, split, Ravler, batch_size=1, sub=1, T_in=0, longrollout=
         print('returning single validation case of size', test_u.shape)
         return test_u
     else:
-        max_norm = np.linalg.norm(data[:,T_in:,...], axis=(2, 3)).max()
-        print(f'Regularisation of Dataset has maximum norm (at subsample of {sub}x): {max_norm:.2f}')
+        max_norm = np.linalg.norm(data[T_in:,...], axis=(1, 2)).max(axis=0)
+        print(f'Regularisation of Dataset has maximum norm (at subsample of {sub}x): {[f"{i:.2f}" for i in max_norm]}')
 
         train_a = data[:ntrain,...].reshape(-1, W, H, C)
         train_u = data[1:ntrain+1,...].reshape(-1, W, H, C)

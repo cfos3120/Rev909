@@ -53,13 +53,21 @@ class RegulatorSampler():
                  weight = 0.01, 
                  sampling_fn = sample_uniform_spherical_shell,
                  target_fn = linear_scale_dissipative_target,
-                 loss_fn=nn.MSELoss(reduction='mean')):
+                 loss_fn=torch.nn.MSELoss(reduction='mean')):
         
         self.sampling_fn = sampling_fn
         self.target_fn = target_fn
         self.loss_function = loss_fn
         self.weight = weight
         self.scale_down_factor = scale_down_factor
+        
+        if all(isinstance(x, np.ndarray) for x in radii):
+            assert len(radii[0]) == shape[-1]
+            print('Regularizer enforces per channel')
+            self.split_channels = True 
+            radii = np.concatenate(radii, axis = 0)
+        else:
+            self.split_channels = False 
 
         # get shape((S, S, 1))
         self.shape = shape
@@ -67,7 +75,14 @@ class RegulatorSampler():
         self.radii = radii
 
     def get_input(self, batch_s):
-        return torch.tensor(self.sampling_fn(batch_s, self.radii, self.shape), dtype=torch.float)
+        if self.split_channels:
+            input_sample = []
+            for i in range(self.shape[-1]):
+                input_sample.append(torch.tensor(self.sampling_fn(batch_s, self.radii[...,i], self.shape[:-1]+ (1,)), dtype=torch.float))
+            input_sample = torch.concatenate(input_sample, dim=-1)
+        else:
+            input_sample = torch.tensor(self.sampling_fn(batch_s, self.radii, self.shape), dtype=torch.float)
+        return input_sample
     
     def get_target(self, x_diss):
         return self.target_fn(x_diss, self.scale_down_factor)
@@ -156,7 +171,9 @@ def pipeline(config):
     Ravler = BatchedAngularMeshRavel(coord_points,m=dataset_radii,n=dataset_angles)
 
     train_loader, test_loader, W, H, max_norm = Cylinder_data(dataset_path, dataset_split, Ravler, batch_size=batch_size, sub=dataset_sub)
-    
+    if not config['parameters']['diss_xy']:
+        max_norm = max_norm.max()
+
     # load in FVM mesh
     U_bc_dict = {'inlet':{ "type":'fixedValue', "value":[1,0,0]},
                 'outlet':{ "type":'zeroGradient'},  
