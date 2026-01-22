@@ -190,9 +190,10 @@ class periodic_FVM(object):
         return grad_dict
 
 class FVM_2D(object):
-    def __init__(self, mesh, Ravler, device='cpu'):
+    def __init__(self, mesh, Ravler, volume_weighting=False, device='cpu'):
         self.mesh = mesh
         self.Ravler = Ravler
+        self.volume_weighting = volume_weighting
 
         if self.mesh.mesh.dim == 2:
             self.scalar_1st_idx = {'dwdx':[0],'dwdy':[1]}
@@ -204,7 +205,6 @@ class FVM_2D(object):
 
     def __call__(self, x, **kwargs):
         
-        
         if len(x.shape) == 3:
             x = x.unsqueeze(-1)
         B, H, W, C = x.shape
@@ -215,6 +215,10 @@ class FVM_2D(object):
         _, grad_pred = Divergence_Operator.caclulate(self.mesh, field=x)
         grad_2nd_pred = Gradient_2nd_Operator.caclulate(self.mesh, field=x)
         
+        if self.volume_weighting:
+            grad_pred /= self.mesh.mesh.cell_volumes.reshape(1,1,-1,1)
+            grad_2nd_pred /= self.mesh.mesh.cell_volumes.reshape(1,1,-1,1)
+
         # If vorticity function (assuming 2D)
         assert C == 2
         if C == 1:
@@ -263,6 +267,8 @@ class HsLoss_real(object):
 
         if a == None:
             self.a = [1,1,1]
+        else:
+            self.a = a
         
         self.grad_function = grad_calculator
 
@@ -305,15 +311,16 @@ class HsLoss_real(object):
             weight_y = torch.sqrt(weight_y)
             loss = self.rel(weight_x, weight_y)
         
+        # had to add 1e-08 to stop sqrt(zero) which has NAN derivative
         else:
             loss = self.rel(x, y)
             if k >= 1:
-                weight_x = self.a[0] * torch.sqrt(x_dx1**2 + x_dy1**2) 
-                weight_y = self.a[0] * torch.sqrt(y_dx1**2 + y_dy1**2)
+                weight_x = self.a[0] * torch.sqrt((x_dx1**2 + x_dy1**2) + 1e-8)
+                weight_y = self.a[0] * torch.sqrt((y_dx1**2 + y_dy1**2) + 1e-8)
                 loss += self.rel(weight_x, weight_y)
             if k >= 2:
-                weight_x = self.a[1] * torch.sqrt(x_dx2**2 + x_dy2**2) 
-                weight_y = self.a[1] * torch.sqrt(y_dx2**2 + y_dy2**2)
+                weight_x = self.a[1] * torch.sqrt((x_dx2**2 + x_dy2**2) + 1e-8)
+                weight_y = self.a[1] * torch.sqrt((y_dx2**2 + y_dy2**2) + 1e-8)
                 loss += self.rel(weight_x, weight_y)
             loss = loss / (k+1)
 

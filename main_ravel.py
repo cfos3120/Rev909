@@ -18,8 +18,9 @@ from utils.gpu_utils import peripheral_setup
 from utils.globalise import sweep_agent_wrapper, setup_output_dir
 from dissipative_utils import sample_uniform_spherical_shell, linear_scale_dissipative_target
 torch.manual_seed(42)
+torch.cuda.manual_seed_all(42)
 np.random.seed(42)
-
+#torch.autograd.set_detect_anomaly(True)
 '''
 TODO: 
 - Geo-FNO concatenates the grid-coordinates (as does normal FNO). MNO does not do this.
@@ -37,10 +38,11 @@ if socket.gethostname() == 'DESKTOP-157DQSC':
 else:
     device = torch.device('cuda')
     data_path = "/home/n.foster/datasets"
-    mesh_path = "/home/n.foster/datasets"
+    mesh_path = "/home/n.foster/openfoam_Cases"
     #sys.path.insert(0, r'/home/n.foster/Geo-FNO')
     sys.path.insert(0, r'/home/n.foster/Torch_VFM')
     DEBUG = False
+DEBUG = False
 
 #from airfoils.naca_geofno import FNO2d
 from src.openfoam_utils.preload_mesh import preprocessed_OpenFOAM_mesh
@@ -148,7 +150,7 @@ def pipeline(config):
     learning_rate   = config['parameters']['learning_rate']
     scheduler_step  = config['parameters']['scheduler_step']
     scheduler_gamma = config['parameters']['scheduler_gamma']
-    batch_size      = config['parameters']['batch_size'] if not DEBUG else 2
+    batch_size      = config['parameters']['batch_size'] #if not DEBUG else 2
     in_dim          = config['dataset_params']['input_dim']
     out_dim         = config['dataset_params']['output_dim']
     k               = config['parameters']['soblev_norm_order']
@@ -163,12 +165,15 @@ def pipeline(config):
     dataset_radii   = config['dataset_params']['radii']
     dataset_angles  = config['dataset_params']['angles']
 
+    volume_weighting  = config['parameters']['volume_weighting']
+    loss_order_weights  = config['parameters']['loss_order_weights']
+
     assert config['dataset_params']['name'] == 'Cylinder' 
     assert config['parameters']['grad_method'] == 'FVM'
 
     # TODO: fix this dataloader
     coord_points = np.load(dataset_path[:-4]+'_coords.npy')
-    Ravler = BatchedAngularMeshRavel(coord_points,m=dataset_radii,n=dataset_angles)
+    Ravler = BatchedAngularMeshRavel(coord_points,m=dataset_radii,n=dataset_angles, device=device)
 
     train_loader, test_loader, W, H, max_norm = Cylinder_data(dataset_path, dataset_split, Ravler, batch_size=batch_size, sub=dataset_sub)
     if not config['parameters']['diss_xy']:
@@ -189,10 +194,10 @@ def pipeline(config):
                 }
     bc_dict = {'U':U_bc_dict, 'p':p_bc_dict}
 
-    mesh = preprocessed_OpenFOAM_mesh(openfoam_case, dim=2, bc_dict=bc_dict)
+    mesh = preprocessed_OpenFOAM_mesh(openfoam_case, dim=2, bc_dict=bc_dict, device=device)
     assert W*H == mesh.mesh.n_cells
 
-    GRAD_FUNCTIONS = {'FVM': FVM_2D(mesh,Ravler,device=device)}
+    GRAD_FUNCTIONS = {'FVM': FVM_2D(mesh,Ravler,volume_weighting=volume_weighting,device=device)}
     
     if config['parameters']['dissipation']:
         regularizer = RegulatorSampler(radii=[max_norm, max_norm*4], shape=(W, H, out_dim), scale_down_factor=0.5, weight=0.01)
@@ -210,9 +215,9 @@ def pipeline(config):
         eval_loss_fn = HsLoss(group=False, size_average=False)
     else:
         grad_calculator = GRAD_FUNCTIONS[grad_method]
-        train_loss_fn = HsLoss_real(grad_calculator=grad_calculator, group=True, size_average=False, k=k)
+        train_loss_fn = HsLoss_real(grad_calculator=grad_calculator, group=True, size_average=False, k=k, a=loss_order_weights)
         eval_loss_fn = HsLoss_real(grad_calculator=grad_calculator, group=False, size_average=False)
-    
+        
     for epoch in range(epochs):
         model.train()
 
@@ -221,12 +226,14 @@ def pipeline(config):
             x, y = x.to(device), y.to(device)
 
             loss, loss_dict = train_batch(model, x, y, train_loss_fn, sampling_class=regularizer)
+            if DEBUG: print(loss, loss_dict)
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             if mini_batch_loss_dict == {}: mini_batch_loss_dict = {k: [] for k in loss_dict}
             for key, value in loss_dict.items(): mini_batch_loss_dict[key].append(value)
-            if DEBUG: break
+            #if DEBUG: break
         print(f'Progress: {epoch:3n}/{epochs:3n} - {i:3n}/{len(train_loader):3n} | Training Loss: {loss.item():3.4f}', end="\r", flush=True)
 
         for x, y in test_loader:

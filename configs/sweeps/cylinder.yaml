@@ -1,0 +1,13 @@
+method: grid
+
+parameters:
+  soblev_norm_order:
+    values: [2,1,0]
+  dissipation:
+    values: [False, True]
+  epochs:
+    values: [50, 100]
+
+metric:
+  name: loss
+  goal: minimize
