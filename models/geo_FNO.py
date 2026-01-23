@@ -87,7 +87,8 @@ class FNO2d(nn.Module):
     def forward(self, x):
         #grid = self.get_grid(x.shape, x.device)
         if self.grid is not None:
-            x = torch.cat((x, self.grid), dim=-1)
+            B = x.shape[0]
+            x = torch.cat((x, self.grid.repeat([B, 1, 1, 1])), dim=-1)
         x = self.fc0(x)
         x = x.permute(0, 3, 1, 2)
 
