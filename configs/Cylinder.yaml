@@ -2,7 +2,7 @@
 wandb:
   entity: "cfos3120-acfr-usyd"
   project: "Cylinder"
-  group: "v1"
+  group: "test_diss"
   sweep_n: 27
 
 peripheral:
@@ -23,9 +23,10 @@ parameters:
   scheduler_step: 10
   scheduler_gamma: 0.5
   batch_size: 50
-  soblev_norm_order: 1
+  soblev_norm_order: 0
   dissipation: True
-  diss_xy: False
+  diss_xy: True
+  input_xy: True
 
   # 
   grad_method: 'FVM'  # 'autograd' | 'FDM' | 'FVM' | 'Spectral'

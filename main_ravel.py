@@ -67,6 +67,7 @@ class RegulatorSampler():
             assert len(radii[0]) == shape[-1]
             print('Regularizer enforces per channel')
             self.split_channels = True 
+            radii = [radii[0][None,...], radii[1][None,...]]
             radii = np.concatenate(radii, axis = 0)
         else:
             self.split_channels = False 
@@ -175,6 +176,11 @@ def pipeline(config):
     coord_points = np.load(dataset_path[:-4]+'_coords.npy')
     Ravler = BatchedAngularMeshRavel(coord_points,m=dataset_radii,n=dataset_angles, device=device)
 
+    if config['parameters']['input_xy']:
+        coord_points = Ravler.to(torch.tensor(coord_points,dtype=torch.float32), forward=True)
+    else:
+        coord_points = None
+
     train_loader, test_loader, W, H, max_norm = Cylinder_data(dataset_path, dataset_split, Ravler, batch_size=batch_size, sub=dataset_sub)
     if not config['parameters']['diss_xy']:
         max_norm = max_norm.max()
@@ -205,7 +211,7 @@ def pipeline(config):
         regularizer = None
     
     #model = Net2d(in_dim=in_dim, out_dim=out_dim, domain_size=S, modes=20, width=64).to(device)
-    model = FNO2d(modes1=modes*2, modes2=modes, width=width, input_dim=in_dim, output_dim=out_dim).to(device)
+    model = FNO2d(modes1=modes*2, modes2=modes, width=width, input_dim=in_dim, output_dim=out_dim, grid=coord_points).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step, gamma=scheduler_gamma)

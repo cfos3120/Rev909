@@ -46,7 +46,7 @@ class SpectralConv2d(nn.Module):
 
 
 class FNO2d(nn.Module):
-    def __init__(self, modes1, modes2, width, input_dim=4, output_dim=1):
+    def __init__(self, modes1, modes2, width, input_dim=4, output_dim=1, grid=None):
         super(FNO2d, self).__init__()
 
         """
@@ -66,6 +66,8 @@ class FNO2d(nn.Module):
         self.modes2 = modes2
         self.width = width
         self.padding = 8  # pad the domain if input is non-periodic
+        if grid is not None:
+            input_dim += 2 #(add x,y coords to input)
         self.fc0 = nn.Linear(input_dim, self.width)  # input channel is 3: (a(x, y), x, y)
 
         self.conv0 = SpectralConv2d(self.width, self.width, self.modes1, self.modes2)
@@ -80,9 +82,12 @@ class FNO2d(nn.Module):
         self.fc1 = nn.Linear(self.width, 128)
         self.fc2 = nn.Linear(128, output_dim)
 
+        self.grid = grid
+
     def forward(self, x):
         #grid = self.get_grid(x.shape, x.device)
-        #x = torch.cat((x, grid), dim=-1)
+        if self.grid is not None:
+            x = torch.cat((x, self.grid), dim=-1)
         x = self.fc0(x)
         x = x.permute(0, 3, 1, 2)
 
