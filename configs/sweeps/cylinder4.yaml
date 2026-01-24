@@ -1,0 +1,13 @@
+method: grid
+
+parameters:
+  soblev_norm_order:
+    values: [2,1,0]
+  diss_xy:
+    values: [True, False]
+  volume_weighting:
+    values: [True, False]
+
+metric:
+  name: testing/l2_data_loss
+  goal: minimize

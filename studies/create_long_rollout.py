@@ -24,9 +24,9 @@ else:
     data_path = "/home/n.foster/datasets" #2D_NS_Re500.npy"
     DEBUG = False
 
-from models.fno_2d import *
-from main import eval_longrollout
-from utils.dataloader import KF_flow_data
+from models.fno_2d import Net2d
+from models.geo_FNO import FNO2d
+from utils.dataloader import KF_flow_data, Cylinder_data
 
 @contextmanager
 def suppress_print():
@@ -82,6 +82,48 @@ def eval_model_long_rollout(config, file_name):
     print(f'Completed in: {(end_t-start_t)/60:4f} minutes')
     np.save(f"{config['peripheral']['out_dir']}/{file_name}.npy", out.cpu().numpy())
 
+def eval_model_long_rollout_cylinder(config, file_name):
+    in_dim          = config['dataset_params']['input_dim']
+    out_dim         = config['dataset_params']['output_dim']
+    modes           = config['parameters']['modes']
+    width           = config['parameters']['width']
+    dataset_name    = config['dataset_params']['dataset_name']
+    dataset_split   = config['dataset_params']['split']
+    dataset_sub     = config['dataset_params']['sub']
+    dataset_T_in    = config['dataset_params']['T_in']
+    dataset_T_out   = config['dataset_params']['T_out']
+    dataset_path = f'{data_path}/{dataset_name}'
+    dataset_radii   = config['dataset_params']['radii']
+    dataset_angles  = config['dataset_params']['angles']
+    W, H = dataset_radii/dataset_sub, dataset_angles
+
+    assert config['dataset_params']['name'] == 'Cylinder' 
+    coord_points = np.load(dataset_path[:-4]+'_coords.npy')
+    Ravler = BatchedAngularMeshRavel(coord_points,m=dataset_radii,n=dataset_angles, device=device)
+
+    if config['parameters']['input_xy']:
+        coord_points = Ravler.to(torch.tensor(coord_points,dtype=torch.float32), forward=True).to(device)
+    else:
+        coord_points = None
+
+    #
+    T_rollout = 10000
+    with suppress_print():
+        test_u = Cylinder_data(dataset_path, dataset_split, Ravler, batch_size=batch_size, sub=dataset_sub, longrollout=True)
+    
+    model = FNO2d(modes1=modes*2, modes2=modes, width=width, input_dim=in_dim, output_dim=out_dim, grid=coord_points).to(device)
+
+    ckpt_path = f"{config['peripheral']['out_dir']}/checkpoint_epoch_50.pth"
+    checkpoint = torch.load(ckpt_path)
+    model.load_state_dict(checkpoint['model_state_dict'])
+
+    start_t = time.perf_counter()
+    out = eval_longrollout(model, test_u[[1],...], T=T_rollout, S=W*dataset_sub, H=H*dataset_sub)
+    
+    end_t = time.perf_counter()
+    print(f'Completed in: {(end_t-start_t)/60:4f} minutes')
+    np.save(f"{config['peripheral']['out_dir']}/{file_name}.npy", out.cpu().numpy())
+
 if __name__ == "__main__":
 
     cwd = Path.cwd()        # current working directory
@@ -97,7 +139,12 @@ if __name__ == "__main__":
         if socket.gethostname() != 'DESKTOP-157DQSC':
             config_file['peripheral']['out_dir'] = f'{path}/{folder}'
         
-        eval_model_long_rollout(config=config_file, file_name='long_rollout_10000.npy')
+        if config_file['dataset_params']['name'] == 'Cylinder':
+            from main_ravel import eval_longrollout
+            eval_model_long_rollout_cylinder(config=config_file, file_name='long_rollout_10000.npy')
+        else:
+            from main import eval_longrollout
+            eval_model_long_rollout(config=config_file, file_name='long_rollout_10000.npy')
 
     print('Rollout of sweep complete')
 

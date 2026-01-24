@@ -177,7 +177,7 @@ def pipeline(config):
     Ravler = BatchedAngularMeshRavel(coord_points,m=dataset_radii,n=dataset_angles, device=device)
 
     if config['parameters']['input_xy']:
-        coord_points = Ravler.to(torch.tensor(coord_points,dtype=torch.float32), forward=True)
+        coord_points = Ravler.to(torch.tensor(coord_points,dtype=torch.float32), forward=True).to(device)
     else:
         coord_points = None
 
@@ -213,6 +213,7 @@ def pipeline(config):
     #model = Net2d(in_dim=in_dim, out_dim=out_dim, domain_size=S, modes=20, width=64).to(device)
     model = FNO2d(modes1=modes*2, modes2=modes, width=width, input_dim=in_dim, output_dim=out_dim, grid=coord_points).to(device)
 
+    if k > 0: learning_rate *= 10 # manual scaling for H1, H2
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step, gamma=scheduler_gamma)
 

@@ -19,11 +19,11 @@ parameters:
 
   # Training Parameters
   epochs: 50
-  learning_rate: 0.0005
+  learning_rate: 0.05 #0.0005
   scheduler_step: 10
   scheduler_gamma: 0.5
   batch_size: 50
-  soblev_norm_order: 1
+  soblev_norm_order: 2
   dissipation: True
   diss_xy: True
   input_xy: True # this needs to be on for long rollout
@@ -31,7 +31,7 @@ parameters:
   # 
   grad_method: 'FVM'  # 'autograd' | 'FDM' | 'FVM' | 'Spectral'
   volume_weighting: False # Weights derivative fields before loss calculation
-  loss_order_weights: [1,1,0.1] # takes list e.g. [1,1,1] for H0, H1, H2
+  loss_order_weights: [1,1,1] # takes list e.g. [1,1,1] for H0, H1, H2
 
 dataset_params:
 
