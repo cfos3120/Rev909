@@ -41,7 +41,7 @@ sys.path.insert(0, rf'{git_path}/loss-landscape')
 import net_plotter
 import copy
 from plot_surface import setup_surface_file, name_surface_file
-import projection as proj
+from projection import tensorlist_to_tensor, project_2D, nplist_to_tensor
 import scheduler
 
 def get_losses(model, dataset_batch, sampling_class, loss_fn):
@@ -100,6 +100,32 @@ def fno_crunch_state(results_dict, model, loss_fn, sampling_class, dataloader, s
 
     return results_dict
 
+def project_models(model, args, model_files, w, s, directions, proj_method='cos'):
+    # load models and prepare the optimization path matrix
+    
+    dx = nplist_to_tensor(directions[0])
+    dy = nplist_to_tensor(directions[1])
+
+    projections_dict = {}
+    for key, value in model_files.items():
+        ckpt = torch.load(value, map_location=device)
+        model.load_state_dict(ckpt['model_state_dict'])
+
+        if args.dir_type == 'weights':
+            w2 = net_plotter.get_weights(model)
+            d = net_plotter.get_diff_weights(w, w2)
+        elif args.dir_type == 'states':
+            s2 = model.state_dict()
+            d = net_plotter.get_diff_states(s, s2)
+        d = tensorlist_to_tensor(d)
+        
+        x, y = project_2D(d, dx, dy, proj_method)
+        projections_dict[key]=[x,y]
+        print (f"{key} has projected coordinates: x={x}, y={y}")
+
+    return projections_dict
+
+
 if __name__ == '__main__':
 
     comm, rank, nproc = None, 0, 1 # Hard coded
@@ -134,9 +160,11 @@ if __name__ == '__main__':
     config, run_id1 = retrieve_wandb_config(target_run_name=args.model1, project=args.wandb_project, entity=args.wandb_entity)
     if args.model2 is not None:
         __, run_id2 = retrieve_wandb_config(target_run_name=args.model2, project=args.wandb_project, entity=args.wandb_entity)
+        ckpt_path2 = f"{ckpt_path}/{args.wandb_sweep2}/{args.model2}-{run_id2}/{args.ckpt_name}"
     if args.model3 is not None:
         __, run_id3 = retrieve_wandb_config(target_run_name=args.model3, project=args.wandb_project, entity=args.wandb_entity)
 
+    save_path = f"{ckpt_path}/{args.wandb_sweep1}/{args.model1}-{run_id1}"
     args_model = config['parameters']
     args_data  = config['dataset_params']
     dataset_path    = f"{data_path}/{args_data['dataset_name']}"
@@ -179,7 +207,7 @@ if __name__ == '__main__':
                   output_dim=args_data['output_dim'], 
                   grid=coord_points).to(device)
     
-    ckpt_path1 = f"{ckpt_path}/{args.wandb_sweep}/{args.model1}-{run_id1}/{args.ckpt_name}"
+    ckpt_path1 = f"{ckpt_path}/{args.wandb_sweep1}/{args.model1}-{run_id1}/{args.ckpt_name}"
 
     ckpt1 = torch.load(ckpt_path1, map_location=device)
     model.load_state_dict(ckpt1['model_state_dict'])
@@ -198,8 +226,7 @@ if __name__ == '__main__':
                     }
 
     if args.model2:
-        model2 = model.copy()
-        ckpt_path2 = f"{ckpt_path}/{args.wandb_sweep}/{args.model2}-{run_id2}/{args.ckpt_name}"
+        model2 = copy.deepcopy(model)
         ckpt2 = torch.load(ckpt_path2, map_location=device)
         model2.load_state_dict(ckpt2['model_state_dict'])
         xdirection = net_plotter.create_target_direction(model, model2, args.dir_type)
@@ -210,9 +237,18 @@ if __name__ == '__main__':
         if args.same_dir:
             ydirection = xdirection
         else:
-            raise NotImplementedError
+            ydirection = net_plotter.create_random_direction(model, args.dir_type, args.yignore, args.ynorm)
         
     directions = [xdirection, ydirection]
+
+    # Create projections:
+    model_files = {args.model1:ckpt_path1}
+    if args.model2 is not None:
+        model_files[args.model2] = ckpt_path2
+    proj_dict = project_models(model, args, model_files, w, s, directions, proj_method='cos')
+
+    with open(f"{save_path}/projected_models.pkl", "wb") as f:
+        pickle.dump(proj_dict, f)
 
     # Loss functions
     sampling_class = RegulatorSampler(radii=[max_norm, max_norm*4], shape=(W, H, args_data['output_dim']), scale_down_factor=0.5, weight=0.01)
@@ -227,12 +263,11 @@ if __name__ == '__main__':
                                    s=s, 
                                    d=directions)
 
-    save_path = f"{ckpt_path}/{args.wandb_sweep}/{args.model1}-{run_id1}/loss_surface.pkl"
-    with open(save_path, "wb") as f:
+    with open(f"{save_path}/loss_surface.pkl", "wb") as f:
         pickle.dump(results_dict, f)
 
     if DEBUG:
-        with open(save_path, "rb") as f:
+        with open(f"{save_path}/loss_surface.pkl", "rb") as f:
             my_dict = pickle.load(f)
             print(results_dict)
 

@@ -4,7 +4,7 @@ cuda: False
 dir_file: ''
 dir_type: 'states'
 model1: restful-sweep-2
-model2:  # these can be used to triangulate a model (x-direction)
+model2: light-sweep-6 # these can be used to triangulate a model (x-direction)
 model3:  # these can be used to triangulate a model (y-direction)
 ckpt_name: 'checkpoint_epoch_50.pth'
 xnorm: ''
@@ -21,4 +21,5 @@ ngpu: 0
 surf_file: r'C:\Users\Noahc\Documents\USYD\PHD\0 - Work Space\loss_surface_analysis\test2.h5'
 wandb_project: Cylinder 
 wandb_entity: "cfos3120-acfr-usyd"
-wandb_sweep: "SWEEP-sty6240b"
+wandb_sweep1: "SWEEP-sty6240b"
+wandb_sweep2: "SWEEP-5vnp53x5"
