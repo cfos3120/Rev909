@@ -14,6 +14,9 @@
 		},
 		{
 			"path": "../Geo-FNO"
+		},
+		{
+			"path": "../loss-landscape"
 		}
 	],
 	"settings": {
