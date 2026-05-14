@@ -74,7 +74,7 @@ def fno_crunch_state(results_dict, model, loss_fn, sampling_class, dataloader, s
 
     for i, coord_idx in enumerate(range(coords.shape[0])):
         coord = coords[coord_idx]
-        print(f'Computing for {i+1}/{coords.shape[0]} coordinates with x={coord[0]:.2f}, y={coord[1]:.2f}', end= ' ')
+        print(f'Computing for {i+1}/{coords.shape[0]} coordinates with x={coord[0]:.2f}, y={coord[1]:.2f}', end= ' ', flush=True)
         t0 = time.perf_counter()
 
         net_plotter.set_states(model, s, d, coord)
@@ -95,7 +95,7 @@ def fno_crunch_state(results_dict, model, loss_fn, sampling_class, dataloader, s
         results_dict['Reg_loss'].append(mini_batch_loss_dict['diss_loss'])
         
         t1 = time.perf_counter()
-        print(f'completed with time: {((t1 - t0) / 60):.2f}s')
+        print(f'completed with time: {((t1 - t0) / 60):.2f}s', flush=True)
         if DEBUG and i > 0: break
 
     return results_dict
@@ -245,15 +245,15 @@ if __name__ == '__main__':
     model_files = {args.model1:ckpt_path1}
     if args.model2 is not None:
         model_files[args.model2] = ckpt_path2
-    proj_dict = project_models(model, args, model_files, w, s, directions, proj_method='cos')
+    #proj_dict = project_models(model, args, model_files, w, s, directions, proj_method='cos')
 
-    with open(f"{save_path}/projected_models.pkl", "wb") as f:
-        pickle.dump(proj_dict, f)
+    #with open(f"{save_path}/projected_models.pkl", "wb") as f:
+    #    pickle.dump(proj_dict, f)
 
     # Loss functions
     sampling_class = RegulatorSampler(radii=[max_norm, max_norm*4], shape=(W, H, args_data['output_dim']), scale_down_factor=0.5, weight=0.01)
     grad_calculator=FVM_2D(mesh,Ravler,volume_weighting=False,device=device)
-    eval_loss_fn = HsLoss_real(grad_calculator=grad_calculator, group=False, size_average=False)
+    eval_loss_fn = HsLoss_real(grad_calculator=grad_calculator, group=True, size_average=False)
 
     results_dict= fno_crunch_state(results_dict, 
                                    model, 

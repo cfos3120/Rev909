@@ -2,7 +2,7 @@
 wandb:
   entity: "cfos3120-acfr-usyd"
   project: "Cylinder"
-  group: "expmnt v1"
+  group: "large"
   sweep_n: 27
 
 peripheral:
@@ -19,7 +19,7 @@ parameters:
 
   # Training Parameters
   epochs: 50
-  learning_rate: 0.0005
+  learning_rate: 0.005 #0.0005
   scheduler_step: 10
   scheduler_gamma: 0.5
   batch_size: 50
@@ -32,7 +32,7 @@ parameters:
   grad_method: 'FVM'  # 'autograd' | 'FDM' | 'FVM' | 'Spectral'
   volume_weighting: False # Weights derivative fields before loss calculation
   loss_order_weights: [1,1,1] # takes list e.g. [1,1,1] for H0, H1, H2
-  dissipation_weight: 1
+  dissipation_weight: 0.005
 
 dataset_params:
 
@@ -42,10 +42,10 @@ dataset_params:
 
   # Dataset Partition
   name: Cylinder
-  dataset_name: RAS_Re100k.npy
-  openfoam_case_dir: cylinder_mno_turb5/case.foam
+  dataset_name: RAS_Re100k_midres.npy
+  openfoam_case_dir: cylinder_mno_turb5_midres/case.foam
   sub: 1
   split: 0.9
-  radii: 59 # these are mesh dependent (should be precalculated)
-  angles: 356
+  radii: 129 # these are mesh dependent (should be precalculated)
+  angles: 636
   

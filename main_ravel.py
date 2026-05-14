@@ -93,7 +93,7 @@ class RegulatorSampler():
     def loss_fn(self, out, y):
         return self.weight * self.loss_function(out, y)
 
-def train_batch(model, x, y, loss_fn, sampling_class=None):
+def train_batch(model, x, y, loss_fn, sampling_class=None, diss_weight=1):
     if len(x.shape) == 3: x = x.unsqueeze(-1)
     if len(y.shape) == 3: y = y.unsqueeze(-1)
     
@@ -109,7 +109,7 @@ def train_batch(model, x, y, loss_fn, sampling_class=None):
         diss_loss = sampling_class.loss_fn(out_diss, y_diss.reshape(-1, y.shape[-1]))
         loss_dict['diss_loss'] = diss_loss.item()
 
-        loss += diss_loss
+        loss += diss_loss*diss_weight
 
     return loss, loss_dict
         
@@ -129,6 +129,7 @@ def eval_batch(model, x, y, loss_fn):
 def eval_longrollout(model, starting_u, T, S, H=None):
     if len(starting_u.shape) == 3:
         starting_u = starting_u.unsqueeze(-1)
+    channel_n = starting_u.shape[-1]
 
     if H is None:
         H = S
@@ -168,6 +169,7 @@ def pipeline(config):
 
     volume_weighting  = config['parameters']['volume_weighting']
     loss_order_weights  = config['parameters']['loss_order_weights']
+    dissipation_weight = config['parameters']['dissipation_weight']
 
     assert config['dataset_params']['name'] == 'Cylinder' 
     assert config['parameters']['grad_method'] == 'FVM'
@@ -232,7 +234,7 @@ def pipeline(config):
         for i, (x, y) in enumerate(train_loader):
             x, y = x.to(device), y.to(device)
 
-            loss, loss_dict = train_batch(model, x, y, train_loss_fn, sampling_class=regularizer)
+            loss, loss_dict = train_batch(model, x, y, train_loss_fn, sampling_class=regularizer, diss_weight=dissipation_weight)
             if DEBUG: print(loss, loss_dict)
             optimizer.zero_grad()
             loss.backward()

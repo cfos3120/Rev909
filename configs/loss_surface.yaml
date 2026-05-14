@@ -1,17 +1,17 @@
-x: '-1:1:51'
-y: '-1:1:51'
+x: '-0.5:0.5:101'
+y: '-0.5:0.5:101'
 cuda: False
 dir_file: ''
 dir_type: 'states'
 model1: restful-sweep-2
-model2: light-sweep-6 # these can be used to triangulate a model (x-direction)
+model2: #light-sweep-6 # these can be used to triangulate a model (x-direction)
 model3:  # these can be used to triangulate a model (y-direction)
 ckpt_name: 'checkpoint_epoch_50.pth'
 xnorm: ''
 ynorm: ''
 xignore: ''
 yignore: ''
-same_dir: True
+same_dir: False
 idx: 0
 surf_file: ''
 raw_data: True
